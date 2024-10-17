@@ -26,7 +26,7 @@ class facemapdataset(Dataset):
           self.transform = transform
           self.data, self.targets = torch.load(data_file)
           self.targets = torch.Tensor(self.targets)
-          self.targets = torch.nan_to_num(self.targets, nan=0.0)
+          self.targets = torch.nan_to_num(self.targets, nan=1.0)
 
      def __len__(self):
           return len(self.targets)
@@ -72,8 +72,8 @@ nTrain = len(loader_train)
 nTest = len(loader_test)
 
 ### hyperparam
-lr = 1e-3
-num_epochs = 50
+lr = 5e-3
+num_epochs = 100
 
 model = timm.create_model('vit_base_patch16_224.mae',pretrained=True,in_chans=1,num_classes=24)
 model = model.to(device)
@@ -92,8 +92,8 @@ for epoch in range(num_epochs):
     for i, (inputs,labels) in enumerate(loader_train):
         inputs = inputs.to(device)
         labels = labels.to(device)
-        scores = model(inputs)
-        loss = loss_fun(scores,labels)
+        scores = F.softplus(model(inputs))
+        loss = loss_fun(torch.log(scores),torch.log(F.softplus(labels)))
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -107,8 +107,8 @@ for epoch in range(num_epochs):
         for i, (inputs,labels) in enumerate(loader_valid):
             inputs = inputs.to(device)
             labels = labels.to(device)
-            scores = model(inputs)
-            loss = loss_fun(scores,labels)
+            scores = F.softplus(model(inputs))
+            loss = loss_fun(torch.log(scores),torch.log(F.softplus(labels)))
             val_loss += loss.item()
         val_loss = val_loss/(i+1)
         
@@ -154,8 +154,8 @@ with torch.no_grad():
     for i, (inputs,labels) in enumerate(loader_test):
         inputs = inputs.to(device)
         labels = labels.to(device)
-        scores = model(inputs)
-        loss = loss_fun(scores,labels)
+        scores = F.softplus(model(inputs))
+        loss = loss_fun(torch.log(scores),torch.log(F.softplus(labels)))
         val_loss += loss.item()
 
         img = inputs.squeeze().detach().cpu().numpy()
