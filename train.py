@@ -34,11 +34,13 @@ class facemapdataset(Dataset):
      def __getitem__(self, index):
           image, label = self.data[index], self.targets[index]
           if self.transform is not None:
-               image = self.transform(image)
+              if torch.rand(1) > 0.5:
+                   image = image.flip([2])
+                   label[::2] = image.shape[1] - label[::2]
           return image, label
 
 ### Make dataset
-dataset  = facemapdataset()
+dataset  = facemapdataset(transform='flip')
 
 x = dataset[0][0]
 dim = x.shape[-1]
@@ -70,8 +72,8 @@ nTrain = len(loader_train)
 nTest = len(loader_test)
 
 ### hyperparam
-lr = 5e-4
-num_epochs = 100
+lr = 1e-3
+num_epochs = 50
 
 model = timm.create_model('vit_base_patch16_224.mae',pretrained=True,in_chans=1,num_classes=24)
 model = model.to(device)
@@ -81,9 +83,12 @@ print("Number of parameters:%d M"%(nParam/1e6))
 optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 minLoss = 1e6
 convIter = 0
-patience = 5
+patience = 10
+train_loss = []
+valid_loss = []
 
 for epoch in range(num_epochs):
+    tr_loss = 0
     for i, (inputs,labels) in enumerate(loader_train):
         inputs = inputs.to(device)
         labels = labels.to(device)
@@ -94,7 +99,9 @@ for epoch in range(num_epochs):
         optimizer.step()
         print ('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}'
                        .format(epoch+1, num_epochs, i+1, nTrain, loss.item()))
-        
+        tr_loss += loss.item()
+    train_loss.append(tr_loss/(i+1))
+
     with torch.no_grad():
         val_loss = 0
         for i, (inputs,labels) in enumerate(loader_valid):
@@ -105,6 +112,7 @@ for epoch in range(num_epochs):
             val_loss += loss.item()
         val_loss = val_loss/(i+1)
         
+        valid_loss.append(val_loss)
 
         print('Val. loss :%.4f'%val_loss)
         
@@ -116,8 +124,8 @@ for epoch in range(num_epochs):
         for i in range(4):
             plt.subplot(1,4,i+1)
             plt.imshow(img[i],cmap='gray')
-            plt.plot(pred[i,::2],pred[i,1::2],'x',c='tab:red')
-            plt.plot(labels[i,::2],labels[i,1::2],'o',c='tab:green')
+            plt.plot(pred[i,::2],pred[i,1::2],'x',c='tab:red',label='pred.')
+            plt.plot(labels[i,::2],labels[i,1::2],'o',c='tab:green',label='label')
         plt.tight_layout()
         plt.savefig('logs/epoch_%03d.jpg'%epoch)
             
@@ -131,7 +139,14 @@ for epoch in range(num_epochs):
 
         if convIter == patience:
             print('Converged at epoch %d with val. loss %.4f'%(convEpoch+1,minLoss))
-            epoch = num_epochs
+            break
+plt.clf()
+plt.plot(train_loss,label='Training')
+plt.plot(valid_loss,label='Valid')
+plt.plot(convEpoch,valid_loss[convEpoch],'x',label='Final Model')
+plt.legend()
+plt.tight_layout()
+plt.savefig('loss_curve.pdf')
 
 ### Load best model for inference
 with torch.no_grad():
@@ -146,8 +161,8 @@ with torch.no_grad():
         img = inputs.squeeze().detach().cpu().numpy()
         pred = scores.squeeze().detach().cpu().numpy()
         labels = labels.cpu().numpy()
-        plt.clf()
         for idx in range(len(img)):
+            plt.clf()
             plt.imshow(img[idx],cmap='gray')
             plt.plot(pred[idx,::2],pred[idx,1::2],'x',c='tab:red')
             plt.plot(labels[idx,::2],labels[idx,1::2],'o',c='tab:green')
