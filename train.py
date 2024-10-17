@@ -12,6 +12,8 @@ from numpy import random
 import numpy as np
 import timm
 import matplotlib.pyplot as plt
+from transformers import AutoImageProcessor, ViTForImageClassification, ViTConfig
+
 torch.manual_seed(42)
 np.random.seed(42)
 
@@ -33,10 +35,9 @@ class facemapdataset(Dataset):
 
      def __getitem__(self, index):
           image, label = self.data[index], self.targets[index]
-          if self.transform is not None:
-              if torch.rand(1) > 0.5:
-                   image = image.flip([2])
-                   label[::2] = image.shape[1] - label[::2]
+          if (self.transform is not None) and (torch.rand(1) > 0.5):
+               image = image.flip([2])
+               label[::2] = 224 - label[::2]
           return image, label
 
 ### Make dataset
@@ -51,7 +52,7 @@ valid_sampler = SubsetRandomSampler(np.arange(int(0.6*N),int(0.8*N)))
 test_sampler = SubsetRandomSampler(np.arange(int(0.8*N),N))
 batch_size = 16
 # Initialize loss and metrics
-loss_fun = torch.nn.MSELoss()
+loss_fun = torch.nn.MSELoss(reduction='sum')
 
 # Initiliaze input dimensions
 num_train = len(train_sampler)
@@ -65,17 +66,43 @@ loader_train = DataLoader(dataset = dataset, drop_last=False,num_workers=0,
 loader_valid = DataLoader(dataset = dataset, drop_last=True,num_workers=0,
         batch_size=batch_size, pin_memory=True,sampler=valid_sampler)
 loader_test = DataLoader(dataset = dataset, drop_last=True,num_workers=0,
-        batch_size=batch_size, pin_memory=True,sampler=test_sampler)
+        batch_size=1, pin_memory=True,sampler=test_sampler)
 
 nValid = len(loader_valid)
 nTrain = len(loader_train)
 nTest = len(loader_test)
 
 ### hyperparam
-lr = 5e-3
-num_epochs = 100
+lr = 5e-4
+num_epochs = 1000
 
-model = timm.create_model('vit_base_patch16_224.mae',pretrained=True,in_chans=1,num_classes=24)
+#model = timm.create_model('vit_base_patch16_224.mae',
+#        pretrained=True,in_chans=1,num_classes=24)
+# Define the number of input channels and output classes
+num_input_channels = 1  # Change this to the desired number of input channels
+num_output_classes = 24  # Change this to the desired number of output classes
+
+# Load the configuration and modify the number of input channels and output classes
+config = ViTConfig.from_pretrained('google/vit-base-patch16-224')
+config.num_channels = num_input_channels
+config.num_labels = num_output_classes
+
+# Load the model with the modified configuration
+model = ViTForImageClassification(config)
+#pdb.set_trace()
+# Modify the patch embedding layer to accept the desired number of input channels
+original_proj = model.vit.embeddings.patch_embeddings.projection
+new_proj = nn.Conv2d(
+    in_channels=num_input_channels,
+    out_channels=original_proj.out_channels,
+    kernel_size=original_proj.kernel_size,
+    stride=original_proj.stride,
+    padding=original_proj.padding
+)
+model.vit.embeddings.patch_embeddings.projection = new_proj
+
+# Modify the classifier to have the desired number of output classes
+model.classifier = nn.Linear(model.config.hidden_size, num_output_classes)
 model = model.to(device)
 nParam = sum(p.numel() for p in model.parameters() if p.requires_grad)
 print("Number of parameters:%d M"%(nParam/1e6))
@@ -92,7 +119,7 @@ for epoch in range(num_epochs):
     for i, (inputs,labels) in enumerate(loader_train):
         inputs = inputs.to(device)
         labels = labels.to(device)
-        scores = F.softplus(model(inputs))
+        scores = F.softplus(model(inputs).logits)
         loss = loss_fun(torch.log(scores),torch.log(F.softplus(labels)))
         optimizer.zero_grad()
         loss.backward()
@@ -107,7 +134,7 @@ for epoch in range(num_epochs):
         for i, (inputs,labels) in enumerate(loader_valid):
             inputs = inputs.to(device)
             labels = labels.to(device)
-            scores = F.softplus(model(inputs))
+            scores = F.softplus(model(inputs).logits)
             loss = loss_fun(torch.log(scores),torch.log(F.softplus(labels)))
             val_loss += loss.item()
         val_loss = val_loss/(i+1)
@@ -121,8 +148,8 @@ for epoch in range(num_epochs):
         labels = labels.cpu().numpy()
         plt.clf()
         plt.figure(figsize=(16,6))
-        for i in range(4):
-            plt.subplot(1,4,i+1)
+        for i in range(batch_size):
+            plt.subplot(1,batch_size,i+1)
             plt.imshow(img[i],cmap='gray')
             plt.plot(pred[i,::2],pred[i,1::2],'x',c='tab:red',label='pred.')
             plt.plot(labels[i,::2],labels[i,1::2],'o',c='tab:green',label='label')
@@ -151,23 +178,23 @@ plt.savefig('loss_curve.pdf')
 ### Load best model for inference
 with torch.no_grad():
     val_loss = 0
+
     for i, (inputs,labels) in enumerate(loader_test):
         inputs = inputs.to(device)
         labels = labels.to(device)
-        scores = F.softplus(model(inputs))
+        scores = F.softplus(model(inputs).logits)
         loss = loss_fun(torch.log(scores),torch.log(F.softplus(labels)))
         val_loss += loss.item()
 
         img = inputs.squeeze().detach().cpu().numpy()
         pred = scores.squeeze().detach().cpu().numpy()
-        labels = labels.cpu().numpy()
-        for idx in range(len(img)):
-            plt.clf()
-            plt.imshow(img[idx],cmap='gray')
-            plt.plot(pred[idx,::2],pred[idx,1::2],'x',c='tab:red')
-            plt.plot(labels[idx,::2],labels[idx,1::2],'o',c='tab:green')
-            plt.tight_layout()
-            plt.savefig('preds/test_%03d.jpg'%idx)
+        labels = labels.squeeze().cpu().numpy()
+        plt.clf()
+        plt.imshow(img,cmap='gray')
+        plt.plot(pred[::2],pred[1::2],'x',c='tab:red')
+        plt.plot(labels[::2],labels[1::2],'o',c='tab:green')
+        plt.tight_layout()
+        plt.savefig('preds/test_%03d.jpg'%i)
 
     val_loss = val_loss/(i+1)
     
