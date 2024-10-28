@@ -12,7 +12,6 @@ from numpy import random
 import numpy as np
 import timm
 import matplotlib.pyplot as plt
-from transformers import AutoImageProcessor, ViTForImageClassification, ViTConfig
 
 torch.manual_seed(42)
 np.random.seed(42)
@@ -41,7 +40,7 @@ class facemapdataset(Dataset):
           return image, label
 
 ### Make dataset
-dataset  = facemapdataset(transform='flip')
+dataset  = facemapdataset() #(transform='flip')
 
 x = dataset[0][0]
 dim = x.shape[-1]
@@ -50,7 +49,7 @@ N = len(dataset)
 train_sampler = SubsetRandomSampler(np.arange(int(0.6*N)))
 valid_sampler = SubsetRandomSampler(np.arange(int(0.6*N),int(0.8*N)))
 test_sampler = SubsetRandomSampler(np.arange(int(0.8*N),N))
-batch_size = 16
+batch_size = 4
 # Initialize loss and metrics
 loss_fun = torch.nn.MSELoss(reduction='sum')
 
@@ -74,35 +73,15 @@ nTest = len(loader_test)
 
 ### hyperparam
 lr = 5e-4
-num_epochs = 1000
+num_epochs = 100
 
-#model = timm.create_model('vit_base_patch16_224.mae',
-#        pretrained=True,in_chans=1,num_classes=24)
-# Define the number of input channels and output classes
 num_input_channels = 1  # Change this to the desired number of input channels
 num_output_classes = 24  # Change this to the desired number of output classes
 
-# Load the configuration and modify the number of input channels and output classes
-config = ViTConfig.from_pretrained('google/vit-base-patch16-224')
-config.num_channels = num_input_channels
-config.num_labels = num_output_classes
 
-# Load the model with the modified configuration
-model = ViTForImageClassification(config)
-#pdb.set_trace()
-# Modify the patch embedding layer to accept the desired number of input channels
-original_proj = model.vit.embeddings.patch_embeddings.projection
-new_proj = nn.Conv2d(
-    in_channels=num_input_channels,
-    out_channels=original_proj.out_channels,
-    kernel_size=original_proj.kernel_size,
-    stride=original_proj.stride,
-    padding=original_proj.padding
-)
-model.vit.embeddings.patch_embeddings.projection = new_proj
+model = timm.create_model('vit_base_patch8_224',
+        pretrained=True,in_chans=1,num_classes=num_output_classes)
 
-# Modify the classifier to have the desired number of output classes
-model.classifier = nn.Linear(model.config.hidden_size, num_output_classes)
 model = model.to(device)
 nParam = sum(p.numel() for p in model.parameters() if p.requires_grad)
 print("Number of parameters:%d M"%(nParam/1e6))
@@ -110,7 +89,7 @@ print("Number of parameters:%d M"%(nParam/1e6))
 optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 minLoss = 1e6
 convIter = 0
-patience = 10
+patience = 1000
 train_loss = []
 valid_loss = []
 
@@ -119,7 +98,7 @@ for epoch in range(num_epochs):
     for i, (inputs,labels) in enumerate(loader_train):
         inputs = inputs.to(device)
         labels = labels.to(device)
-        scores = F.softplus(model(inputs).logits)
+        scores = F.softplus(model(inputs))
         loss = loss_fun(torch.log(scores),torch.log(F.softplus(labels)))
         optimizer.zero_grad()
         loss.backward()
@@ -134,7 +113,7 @@ for epoch in range(num_epochs):
         for i, (inputs,labels) in enumerate(loader_valid):
             inputs = inputs.to(device)
             labels = labels.to(device)
-            scores = F.softplus(model(inputs).logits)
+            scores = F.softplus(model(inputs))
             loss = loss_fun(torch.log(scores),torch.log(F.softplus(labels)))
             val_loss += loss.item()
         val_loss = val_loss/(i+1)
@@ -182,7 +161,7 @@ with torch.no_grad():
     for i, (inputs,labels) in enumerate(loader_test):
         inputs = inputs.to(device)
         labels = labels.to(device)
-        scores = F.softplus(model(inputs).logits)
+        scores = F.softplus(model(inputs))
         loss = loss_fun(torch.log(scores),torch.log(F.softplus(labels)))
         val_loss += loss.item()
 
