@@ -73,7 +73,7 @@ nTest = len(loader_test)
 
 ### hyperparam
 lr = 5e-4
-num_epochs = 500
+num_epochs = 5
 
 num_input_channels = 1  # Change this to the desired number of input channels
 num_output_classes = 24  # Change this to the desired number of output classes
@@ -90,7 +90,7 @@ print("Number of parameters:%2f M"%(nParam/1e6))
 optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 minLoss = 1e6
 convIter = 0
-patience = 50
+patience = 5
 train_loss = []
 valid_loss = []
 
@@ -162,31 +162,39 @@ plt.legend()
 plt.tight_layout()
 plt.savefig('loss_curve.pdf')
 
-if 0:
-    ### Load best model for inference
-    with torch.no_grad():
-        val_loss = 0
+### Load best model for inference
+with torch.no_grad():
+    val_loss = 0
 
-        for i, (inputs,labels) in enumerate(loader_test):
-            inputs = inputs.to(device)
-            labels = labels.to(device)
-            scores,_ = (model(inputs))
-            loss = loss_fun((scores),((labels)))
-            val_loss += loss.item()
+    for i, (inputs,labels) in enumerate(loader_test):
+        inputs = inputs.to(device)
+        labels = labels.to(device)
+        scores,fmap = (model(inputs))
+        loss = loss_fun((scores),((labels)))
+        val_loss += loss.item()
 
-            img = inputs.squeeze().detach().cpu().numpy()
-            pred = scores.squeeze().detach().cpu().numpy()
-            labels = labels.squeeze().cpu().numpy()
-            plt.clf()
-            plt.imshow(img,cmap='gray')
-            plt.plot(pred[::2],pred[1::2],'x',c='tab:red')
-            plt.plot(labels[::2],labels[1::2],'o',c='tab:green')
-            plt.tight_layout()
-            plt.savefig('preds/test_%03d.jpg'%i)
+        img = inputs.squeeze().detach().cpu().numpy()
+        pred = scores.squeeze().detach().cpu().numpy()
+        labels = labels.squeeze().cpu().numpy()
+        fmap = fmap.mean(1).squeeze().cpu().numpy()
 
-        val_loss = val_loss/(i+1)
-        
+        plt.clf()
+        plt.figure(figsize=(12,4))
+        plt.subplot(141)
+        plt.imshow(img,cmap='gray')
+        plt.subplot(142)
+        plt.imshow(labels)
+        plt.subplot(143)
+        plt.imshow(pred)
+        plt.subplot(144)
+        plt.imshow(fmap)
 
-        print('Test. loss :%.4f'%val_loss)
-        
+        plt.tight_layout()
+        plt.savefig('preds/test_%03d.jpg'%i)
+
+    val_loss = val_loss/(i+1)
+    
+
+    print('Test. loss :%.4f'%val_loss)
+    
 
