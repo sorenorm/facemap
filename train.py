@@ -33,7 +33,7 @@ class facemapdataset(Dataset):
           return len(self.targets)
 
      def __getitem__(self, index):
-          image, label = self.data[index], self.targets[index]
+          image, label = self.data[index].clone(), self.targets[index].clone()
           if (self.transform is not None) and (torch.rand(1) > 0.5):
                image = image.flip([2])
                label[::2] = 224 - label[::2]
