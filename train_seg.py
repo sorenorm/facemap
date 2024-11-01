@@ -40,7 +40,7 @@ class facemapdataset(Dataset):
           return image, label
 
 ### Make dataset
-dataset  = facemapdataset() #(transform='flip')
+dataset  = facemapdataset(transform='flip')
 
 x = dataset[0][0]
 dim = x.shape[-1]
@@ -73,7 +73,7 @@ nTest = len(loader_test)
 
 ### hyperparam
 lr = 5e-4
-num_epochs = 10
+num_epochs = 500
 
 num_input_channels = 1  # Change this to the desired number of input channels
 num_output_classes = 24  # Change this to the desired number of output classes
@@ -85,12 +85,12 @@ model = Unet()
 
 model = model.to(device)
 nParam = sum(p.numel() for p in model.parameters() if p.requires_grad)
-print("Number of parameters:%d M"%(nParam/1e6))
+print("Number of parameters:%2f M"%(nParam/1e6))
 
 optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 minLoss = 1e6
 convIter = 0
-patience = 1000
+patience = 50
 train_loss = []
 valid_loss = []
 
@@ -99,7 +99,7 @@ for epoch in range(num_epochs):
     for i, (inputs,labels) in enumerate(loader_train):
         inputs = inputs.to(device)
         labels = labels.to(device)
-        scores = (model(inputs))
+        scores, _ = (model(inputs))
 
         loss = loss_fun((scores),((labels)))
         optimizer.zero_grad()
@@ -115,7 +115,7 @@ for epoch in range(num_epochs):
         for i, (inputs,labels) in enumerate(loader_valid):
             inputs = inputs.to(device)
             labels = labels.to(device)
-            scores = (model(inputs))
+            scores, fmap = (model(inputs))
             loss = loss_fun((scores),((labels)))
             val_loss += loss.item()
         val_loss = val_loss/(i+1)
@@ -126,14 +126,19 @@ for epoch in range(num_epochs):
         
         labels = labels.squeeze().detach().cpu().numpy()
         scores = scores.squeeze().detach().cpu().numpy()
+        img = inputs.squeeze().detach().cpu().numpy()
+        fmap = inputs.mean(1).squeeze().detach().cpu().numpy()
 
         plt.clf()
-        plt.figure(figsize=(16,6))
+        plt.figure(figsize=(16,12))
         for i in range(batch_size):
-            plt.subplot(2,batch_size,2*i+1)
+            plt.subplot(batch_size,3,3*i+1)
             plt.imshow(labels[i])
-            plt.subplot(2,batch_size,2*i+2)
-            plt.imshow(scores[i])
+            plt.subplot(batch_size,3,3*i+2)
+            plt.imshow(scores[i]*img[i])
+            plt.subplot(batch_size,3,3*i+3)
+            plt.imshow(fmap[i])
+
         plt.tight_layout()
 
         plt.savefig('logs/epoch_%03d.jpg'%epoch)
@@ -165,7 +170,7 @@ if 0:
         for i, (inputs,labels) in enumerate(loader_test):
             inputs = inputs.to(device)
             labels = labels.to(device)
-            scores = (model(inputs))
+            scores,_ = (model(inputs))
             loss = loss_fun((scores),((labels)))
             val_loss += loss.item()
 

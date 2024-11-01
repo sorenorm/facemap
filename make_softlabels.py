@@ -16,5 +16,4 @@ for i in range(len(y)):
     label = gaussian_filter(mask,sigma=sigma)
     softlabels[i,0] = torch.Tensor(label)
 
-pdb.set_trace()
 torch.save((x,y,softlabels),'data/facemap_softlabels.pt')

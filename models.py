@@ -88,17 +88,16 @@ class Unet(nn.Module):
 #        x = torch.cat((x,x_enc[-4]),dim=1)
 #        x = self.dec2(x)
 #        x = torch.cat((x,x_enc[-5]),dim=1)
+        fmap = self.act(self.dec11(x))
+        x = self.dec12(fmap)
 
-        x = self.act(self.dec11(x))
-        x = self.dec12(x)
-
-        return x
+        return x,fmap
 
     def forward(self, x):
 #        pdb.set_trace()
         # Unet encoder result
         x_enc = self.encoder(x)
         # Outputs for MSE
-        xHat = self.decoder(x_enc)
+        xHat, fmap = self.decoder(x_enc)
 
-        return xHat
+        return xHat, fmap
