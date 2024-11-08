@@ -20,7 +20,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 class facemapdataset(Dataset):
      def __init__(self, 
-             data_file = 'data/facemap_224.pt',
+             data_file = 'data/facemap_test_224.pt',
              transform=None):
           super().__init__()
 
