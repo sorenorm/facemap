@@ -140,10 +140,6 @@ nTest = len(loader_test)
 lr = 5e-4
 num_epochs = 1000
 
-num_input_channels = 1  # Change this to the desired number of input channels
-num_output_classes = 24  # Change this to the desired number of output classes
-
-
 model = Unet()
 #timm.create_model('vit_base_patch8_224',
 #        pretrained=True,in_chans=1,num_classes=num_output_classes)
@@ -155,7 +151,7 @@ print("Number of parameters:%2f M"%(nParam/1e6))
 optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 minLoss = 1e6
 convIter = 0
-patience = 100
+patience = 1000
 train_loss = []
 valid_loss = []
 
@@ -242,18 +238,65 @@ with torch.no_grad():
         img = inputs.squeeze().detach().cpu().numpy()
         pred = scores.squeeze().detach().cpu().numpy()
         labels = labels.squeeze().cpu().numpy()
-        fmap = fmap.mean(1).squeeze().cpu().numpy()
+        fmap_mean = fmap.mean(1).squeeze().cpu().numpy()
+        fmap_each = fmap.squeeze().cpu().numpy()
+        fmap_1 = fmap_each[0]
+        fmap_2 = fmap_each[1]
+        fmap_3 = fmap_each[2]
+        fmap_4 = fmap_each[3]
+        fmap_5 = fmap_each[4]
+        fmap_6 = fmap_each[5]
+        fmap_7 = fmap_each[6]
+        fmap_8 = fmap_each[7]
+
 
         plt.clf()
-        plt.figure(figsize=(12,4))
-        plt.subplot(141)
-        plt.imshow(img,cmap='gray')
-        plt.subplot(142)
+        plt.figure(figsize=(12, 9))
+
+        # Display the main images
+        plt.subplot(3, 4, 1)
+        plt.imshow(img, cmap='gray')
+        plt.title("Input Image")
+
+        plt.subplot(3, 4, 2)
         plt.imshow(labels)
-        plt.subplot(143)
+        plt.title("Input Image")
+
+        plt.subplot(3, 4, 3)
         plt.imshow(pred)
-        plt.subplot(144)
-        plt.imshow(fmap)
+        plt.title("Prediction")
+
+        plt.subplot(3, 4, 4)
+        plt.imshow(fmap_mean)
+        plt.title("Feature Map Mean")
+        # Display each individual feature map
+        plt.subplot(3, 4, 5)
+        plt.imshow(fmap_1)
+        plt.title("Feature Map 1")
+
+        plt.subplot(3, 4, 6)
+        plt.imshow(fmap_2)
+        plt.title("Feature Map 2")
+
+        plt.subplot(3, 4, 7)
+        plt.imshow(fmap_3)
+        plt.title("Feature Map 3")
+        
+        plt.subplot(3, 4, 8)
+        plt.imshow(fmap_5)
+        plt.title("Feature Map 5")
+
+        plt.subplot(3, 4, 9)
+        plt.imshow(fmap_6)
+        plt.title("Feature Map 6")
+
+        plt.subplot(3, 4, 10)
+        plt.imshow(fmap_7)
+        plt.title("Feature Map 7")
+        
+        plt.subplot(3, 4, 11)
+        plt.imshow(fmap_8)
+        plt.title("Feature Map 8")
 
         plt.tight_layout()
         plt.savefig('preds/test_%03d.jpg'%i)
