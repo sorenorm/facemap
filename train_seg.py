@@ -419,7 +419,7 @@ nTest = len(loader_test)
 
 ### hyperparam
 lr = 5e-4
-num_epochs = 1000
+num_epochs = 50
 
 model = Unet()
 # timm.create_model('vit_base_patch8_224',
