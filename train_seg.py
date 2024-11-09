@@ -513,30 +513,63 @@ plt.tight_layout()
 plt.savefig("loss_curve.pdf")
 
 ### Load best model for inference
+### Load best model for inference
 with torch.no_grad():
     val_loss = 0
 
+    # First pass: compute global min and max of feature maps across the test set
+    global_min = float("inf")
+    global_max = float("-inf")
     for i, (inputs, labels) in enumerate(loader_test):
         inputs = inputs.to(device)
         labels = labels.to(device)
         scores, fmap = model(inputs)
-        loss = loss_fun((scores), ((labels)))
+        # Compute min and max of feature maps
+        fmap_min = fmap.min().item()
+        fmap_max = fmap.max().item()
+        if fmap_min < global_min:
+            global_min = fmap_min
+        if fmap_max > global_max:
+            global_max = fmap_max
+
+    # Handle case where global_max == global_min to avoid division by zero
+    fmap_range = global_max - global_min
+    if fmap_range == 0:
+        fmap_range = 1e-6  # Small epsilon value
+
+    print("Global min of feature maps:", global_min)
+    print("Global max of feature maps:", global_max)
+
+    # Second pass: compute loss and plot images with normalized feature maps
+    val_loss = 0
+    for i, (inputs, labels) in enumerate(loader_test):
+        inputs = inputs.to(device)
+        labels = labels.to(device)
+        scores, fmap = model(inputs)
+        loss = loss_fun(scores, labels)
         val_loss += loss.item()
 
         img = inputs.squeeze().detach().cpu().numpy()
         pred = scores.squeeze().detach().cpu().numpy()
-        labels = labels.squeeze().cpu().numpy()
+        labels_np = labels.squeeze().cpu().numpy()
         fmap_mean = fmap.mean(1).squeeze().cpu().numpy()
         fmap_each = fmap.squeeze().cpu().numpy()
-        fmap_1 = fmap_each[0]
-        fmap_2 = fmap_each[1]
-        fmap_3 = fmap_each[2]
-        fmap_4 = fmap_each[3]
-        fmap_5 = fmap_each[4]
-        fmap_6 = fmap_each[5]
-        fmap_7 = fmap_each[6]
-        fmap_8 = fmap_each[7]
 
+        # Normalize the feature maps using global min and max
+        fmap_mean_norm = (fmap_mean - global_min) / fmap_range
+        fmap_each_norm = (fmap_each - global_min) / fmap_range
+
+        # Extract individual normalized feature maps
+        fmap_1 = fmap_each_norm[0]
+        fmap_2 = fmap_each_norm[1]
+        fmap_3 = fmap_each_norm[2]
+        fmap_4 = fmap_each_norm[3]
+        fmap_5 = fmap_each_norm[4]
+        fmap_6 = fmap_each_norm[5]
+        fmap_7 = fmap_each_norm[6]
+        fmap_8 = fmap_each_norm[7]
+
+        # Plotting code
         plt.clf()
         plt.figure(figsize=(12, 9))
 
@@ -546,50 +579,54 @@ with torch.no_grad():
         plt.title("Input Image")
 
         plt.subplot(3, 4, 2)
-        plt.imshow(labels)
-        plt.title("Input Image")
+        plt.imshow(labels_np, cmap="gray")
+        plt.title("Ground Truth")
 
         plt.subplot(3, 4, 3)
-        plt.imshow(pred)
+        plt.imshow(pred, cmap="gray")
         plt.title("Prediction")
 
         plt.subplot(3, 4, 4)
-        plt.imshow(fmap_mean)
-        plt.title("Feature Map Mean")
-        # Display each individual feature map
+        plt.imshow(fmap_mean_norm, cmap="gray")
+        plt.title("Normalized Feature Map Mean")
+
+        # Display each individual normalized feature map
         plt.subplot(3, 4, 5)
-        plt.imshow(fmap_1)
+        plt.imshow(fmap_1, cmap="gray")
         plt.title("Feature Map 1")
 
         plt.subplot(3, 4, 6)
-        plt.imshow(fmap_2)
+        plt.imshow(fmap_2, cmap="gray")
         plt.title("Feature Map 2")
 
         plt.subplot(3, 4, 7)
-        plt.imshow(fmap_3)
+        plt.imshow(fmap_3, cmap="gray")
         plt.title("Feature Map 3")
 
         plt.subplot(3, 4, 8)
-        plt.imshow(fmap_5)
-        plt.title("Feature Map 5")
+        plt.imshow(fmap_4, cmap="gray")
+        plt.title("Feature Map 4")
 
         plt.subplot(3, 4, 9)
-        plt.imshow(fmap_6)
-        plt.title("Feature Map 6")
+        plt.imshow(fmap_5, cmap="gray")
+        plt.title("Feature Map 5")
 
         plt.subplot(3, 4, 10)
-        plt.imshow(fmap_7)
-        plt.title("Feature Map 7")
+        plt.imshow(fmap_6, cmap="gray")
+        plt.title("Feature Map 6")
 
         plt.subplot(3, 4, 11)
-        plt.imshow(fmap_8)
+        plt.imshow(fmap_7, cmap="gray")
+        plt.title("Feature Map 7")
+
+        plt.subplot(3, 4, 12)
+        plt.imshow(fmap_8, cmap="gray")
         plt.title("Feature Map 8")
 
         plt.tight_layout()
-        plt.savefig("preds/test_%03d.jpg" % i)
+        plt.savefig("preds/test_{:03d}.jpg".format(i))
         plt.close()
         gc.collect()
 
     val_loss = val_loss / (i + 1)
-
-    print("Test. loss :%.4f" % val_loss)
+    print("Test loss: {:.4f}".format(val_loss))
