@@ -277,33 +277,41 @@ plt.legend()
 plt.tight_layout()
 plt.savefig("loss_curve.pdf")
 
-# Load the best model for inference
-model.load_state_dict(torch.load("models/best_model.pt"))
-model.eval()
-
+### Load best model for inference
 with torch.no_grad():
     val_loss = 0
 
-    # Compute global min and max of feature maps across the test set
-    global_min = float("inf")
-    global_max = float("-inf")
+    # First pass: compute global min and max per channel of feature maps across the test set
+    global_min = None
+    global_max = None
     for i, (inputs, labels) in enumerate(loader_test):
         inputs = inputs.to(device)
         labels = labels.to(device)
         scores, fmap = model(inputs)
-        fmap_min = fmap.min().item()
-        fmap_max = fmap.max().item()
-        if fmap_min < global_min:
-            global_min = fmap_min
-        if fmap_max > global_max:
-            global_max = fmap_max
+        fmap = fmap.detach().cpu().numpy()  # Shape: (batch_size, num_channels, H, W)
 
-    fmap_range = global_max - global_min if global_max != global_min else 1e-6
+        # Initialize global_min and global_max
+        if global_min is None:
+            num_channels = fmap.shape[1]
+            global_min = np.full(num_channels, np.inf)
+            global_max = np.full(num_channels, -np.inf)
 
-    print("Global min of feature maps:", global_min)
-    print("Global max of feature maps:", global_max)
+        # Compute min and max per channel for the current batch
+        batch_min = fmap.min(axis=(0, 2, 3))  # Shape: (num_channels,)
+        batch_max = fmap.max(axis=(0, 2, 3))  # Shape: (num_channels,)
 
-    # Compute loss and plot images with normalized feature maps
+        # Update global min and max
+        global_min = np.minimum(global_min, batch_min)
+        global_max = np.maximum(global_max, batch_max)
+
+    # Handle case where global_max == global_min to avoid division by zero
+    fmap_range = global_max - global_min
+    fmap_range[fmap_range == 0] = 1e-6  # Small epsilon value
+
+    print("Global min per channel of feature maps:", global_min)
+    print("Global max per channel of feature maps:", global_max)
+
+    # Second pass: compute loss and plot images with normalized feature maps
     val_loss = 0
     for i, (inputs, labels) in enumerate(loader_test):
         inputs = inputs.to(device)
@@ -315,15 +323,30 @@ with torch.no_grad():
         img = inputs.squeeze().detach().cpu().numpy()
         pred = scores.squeeze().detach().cpu().numpy()
         labels_np = labels.squeeze().cpu().numpy()
-        fmap_mean = fmap.mean(1).squeeze().cpu().numpy()
-        fmap_each = fmap.squeeze().cpu().numpy()
+        fmap = fmap.detach().cpu().numpy()  # Shape: (batch_size, num_channels, H, W)
 
-        # Normalize the feature maps using global min and max
-        fmap_mean_norm = (fmap_mean - global_min) / fmap_range
-        fmap_each_norm = (fmap_each - global_min) / fmap_range
+        # Normalize the feature maps per channel using global min and max
+        fmap_norm = (fmap - global_min[None, :, None, None]) / (
+            fmap_range[None, :, None, None]
+        )
 
-        # Extract individual normalized feature maps
-        fmap_list = [fmap_each_norm[i] for i in range(fmap_each_norm.shape[0])]
+        # Clip values to [0, 1]
+        fmap_norm = np.clip(fmap_norm, 0, 1)
+
+        # Extract normalized feature maps
+        fmap_mean = fmap_norm.mean(axis=1).squeeze()  # Shape: (H, W)
+        fmap_each = fmap_norm.squeeze()  # Shape: (num_channels, H, W)
+
+        # Now fmap_each has shape (num_channels, H, W)
+        # Extract individual feature maps (adjust indices based on num_channels)
+        fmap_1 = fmap_each[0]
+        fmap_2 = fmap_each[1]
+        fmap_3 = fmap_each[2]
+        fmap_4 = fmap_each[3]
+        fmap_5 = fmap_each[4]
+        fmap_6 = fmap_each[5]
+        fmap_7 = fmap_each[6]
+        fmap_8 = fmap_each[7]
 
         # Plotting code
         plt.clf()
@@ -343,14 +366,41 @@ with torch.no_grad():
         plt.title("Prediction")
 
         plt.subplot(3, 4, 4)
-        plt.imshow(fmap_mean_norm, cmap="gray")
+        plt.imshow(fmap_mean, cmap="viridis")
         plt.title("Normalized Feature Map Mean")
 
-        # Display individual normalized feature maps
-        for idx in range(min(8, len(fmap_list))):
-            plt.subplot(3, 4, 5 + idx)
-            plt.imshow(fmap_list[idx], cmap="gray")
-            plt.title(f"Feature Map {idx + 1}")
+        # Display each individual normalized feature map with a colorful colormap
+        plt.subplot(3, 4, 5)
+        plt.imshow(fmap_1, cmap="viridis")
+        plt.title("Feature Map 1")
+
+        plt.subplot(3, 4, 6)
+        plt.imshow(fmap_2, cmap="viridis")
+        plt.title("Feature Map 2")
+
+        plt.subplot(3, 4, 7)
+        plt.imshow(fmap_3, cmap="viridis")
+        plt.title("Feature Map 3")
+
+        plt.subplot(3, 4, 8)
+        plt.imshow(fmap_4, cmap="viridis")
+        plt.title("Feature Map 4")
+
+        plt.subplot(3, 4, 9)
+        plt.imshow(fmap_5, cmap="viridis")
+        plt.title("Feature Map 5")
+
+        plt.subplot(3, 4, 10)
+        plt.imshow(fmap_6, cmap="viridis")
+        plt.title("Feature Map 6")
+
+        plt.subplot(3, 4, 11)
+        plt.imshow(fmap_7, cmap="viridis")
+        plt.title("Feature Map 7")
+
+        plt.subplot(3, 4, 12)
+        plt.imshow(fmap_8, cmap="viridis")
+        plt.title("Feature Map 8")
 
         plt.tight_layout()
         plt.savefig("preds/test_{:03d}.jpg".format(i))
